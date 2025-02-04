@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Quickemu Space
+Comment=Create and manage VMs with an intuitive UI
+Type=Application
+Icon=dev.lj3954.QuickemuSpace
+Exec=quickemu_space %F
+Terminal=false
+StartupNotify=true
+Categories=COSMIC
+Keywords=COSMIC
+MimeType=

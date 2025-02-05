@@ -28,12 +28,14 @@ pub struct AppModel {
     key_binds: HashMap<menu::KeyBind, MenuAction>,
     // Configuration data that persists between application runs.
     config: Config,
+    page: Page,
     creation: creation::State,
 }
 
 /// Messages emitted by the application and its widgets.
 #[derive(Debug, Clone)]
 pub enum Message {
+    None,
     Creation(creation::Message),
     OpenRepositoryUrl,
     SubscriptionChannel,
@@ -75,6 +77,8 @@ impl Application for AppModel {
             .icon(icon::from_name("applications-science-symbolic"))
             .activate();
 
+        let (creation, creation_task) = creation::State::new();
+
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
@@ -94,12 +98,15 @@ impl Application for AppModel {
                     }
                 })
                 .unwrap_or_default(),
+            page: Page::default(),
+            creation,
         };
 
         // Create a startup command that sets the window title.
         let command = app.update_title();
 
-        (app, command)
+        let task = Task::batch([creation_task, command]);
+        (app, task)
     }
 
     /// Elements to pack at the start of the header bar.
@@ -140,13 +147,10 @@ impl Application for AppModel {
     /// Application events will be processed through the view. Any messages emitted by
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
-        widget::text::title1(fl!("welcome"))
-            .apply(widget::container)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Center)
-            .into()
+        match self.page {
+            Page::Creation => self.creation.view(),
+            _ => todo!(),
+        }
     }
 
     /// Register subscriptions for this application.
@@ -186,6 +190,7 @@ impl Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
+            Message::None => {}
             Message::OpenRepositoryUrl => {
                 _ = open::that_detached(REPOSITORY);
             }
@@ -215,6 +220,10 @@ impl Application for AppModel {
                     eprintln!("failed to open {url:?}: {err}");
                 }
             },
+
+            Message::Creation(msg) => {
+                return self.creation.update(msg);
+            }
         }
         Task::none()
     }
@@ -280,9 +289,10 @@ impl AppModel {
     }
 }
 
-/// The page to display in the application.
+#[derive(Copy, Clone, Default)]
 pub enum Page {
-    Creation(creation::Page),
+    #[default]
+    Creation,
 }
 
 /// The context page to display in the context drawer.

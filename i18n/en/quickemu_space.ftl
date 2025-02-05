@@ -4,4 +4,4 @@ view = View
 welcome = Welcome to COSMIC! ✨
 page-id = Page { $num }
 git-description = Git commit {$hash} on {$date}
-new-vm = Create new VM
+page-newvm = Create new VM

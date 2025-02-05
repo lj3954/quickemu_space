@@ -18,6 +18,8 @@ tokio = { version = "1.41.0", features = ["full"] }
 quickemu_core = { git = "https://github.com/lj3954/quickemu-rs" }
 quickget_core = { git = "https://github.com/lj3954/quickemu-rs" }
 itertools = "0.14.0"
+size = "0.5.0"
+ashpd = "0.10.2"
 
 [dependencies.i18n-embed]
 version = "0.15"

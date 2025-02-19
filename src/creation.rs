@@ -31,7 +31,6 @@ static RECOMMENDED_RAM: LazyLock<f64> =
 pub struct State {
     os_list: Vec<OS>,
     page: Page,
-    options: Option<OptionSelection>,
 }
 
 impl State {
@@ -50,7 +49,6 @@ impl State {
             Self {
                 os_list: vec![],
                 page: Page::default(),
-                options: None,
             },
             task,
         )
@@ -62,18 +60,28 @@ impl State {
                 self.page = Page::SelectOS;
             }
             Message::SelectedOS(os) => {
-                self.options = Some(OptionSelection::new(os));
-                self.page = Page::Options;
+                self.page = Page::Options(OptionSelection::new(os));
             }
-            Message::SelectedRelease(release) => {
-                self.options.as_mut().unwrap().select_release(release)
-            }
-            Message::SelectedEdition(edition) => {
-                self.options.as_mut().unwrap().select_edition(edition)
-            }
-            Message::SelectedArch(arch) => self.options.as_mut().unwrap().select_arch(arch),
-            Message::SetRAM(ram) => self.options.as_mut().unwrap().ram = ram,
-            Message::SetCPUCores(cores) => self.options.as_mut().unwrap().cpu_cores = cores,
+            Message::SelectedRelease(release) => match self.page {
+                Page::Options(ref mut options) => options.select_release(release),
+                _ => panic!("Selected release while not being on options page"),
+            },
+            Message::SelectedEdition(edition) => match self.page {
+                Page::Options(ref mut options) => options.select_edition(edition),
+                _ => panic!("Selected edition while not being on options page"),
+            },
+            Message::SelectedArch(arch) => match self.page {
+                Page::Options(ref mut options) => options.select_arch(arch),
+                _ => panic!("Selected arch while not being on options page"),
+            },
+            Message::SetRAM(ram) => match self.page {
+                Page::Options(ref mut options) => options.ram = ram,
+                _ => panic!("Set RAM while not being on options page"),
+            },
+            Message::SetCPUCores(cores) => match self.page {
+                Page::Options(ref mut options) => options.cpu_cores = cores,
+                _ => panic!("Set CPU cores while not being on options page"),
+            },
             Message::SelectVMDir => {
                 return Task::perform(
                     async move {
@@ -104,18 +112,26 @@ impl State {
                     },
                 )
             }
-            Message::SelectedVMDir(dir) => {
-                self.options.as_mut().unwrap().directory = dir;
-            }
-            Message::SelectedVMName(name) => {
-                self.options.as_mut().unwrap().vm_name = Some(name);
-            }
-            Message::FinalizeVMName => {
-                let vm_name = &mut self.options.as_mut().unwrap().vm_name;
-                if vm_name.as_ref().is_some_and(|vm_name| vm_name.is_empty()) {
-                    *vm_name = None;
+            Message::SelectedVMDir(dir) => match self.page {
+                Page::Options(ref mut options) => options.directory = dir,
+                _ => panic!("Selected VM dir while not being on options page"),
+            },
+            Message::SelectedVMName(name) => match self.page {
+                Page::Options(ref mut options) => options.vm_name = Some(name),
+                _ => panic!("Selected VM name while not being on options page"),
+            },
+            Message::FinalizeVMName => match self.page {
+                Page::Options(ref mut options) => {
+                    if options
+                        .vm_name
+                        .as_ref()
+                        .is_some_and(|vm_name| vm_name.is_empty())
+                    {
+                        options.vm_name = None;
+                    }
                 }
-            }
+                _ => panic!("Finalized VM name while not being on options page"),
+            },
             Message::Error(e) => {
                 self.page = Page::Error(e);
             }
@@ -155,12 +171,13 @@ impl State {
                 }
                 widget::scrollable(list_column).into()
             }
-            Page::Options => self.options.as_ref().unwrap().view(),
+            Page::Options(ref options) => options.view(),
             _ => todo!(),
         }
     }
 }
 
+#[derive(Debug, Clone)]
 struct SelectableComboBox<T: Display + Clone + PartialEq> {
     state: combo_box::State<T>,
     selected: Option<T>,
@@ -221,6 +238,7 @@ impl<T: Display + Clone + PartialEq> SelectableComboBox<T> {
     }
 }
 
+#[derive(Debug, Clone)]
 struct OptionSelection {
     selected_os: OS,
     release_list: SelectableComboBox<String>,
@@ -511,7 +529,7 @@ pub enum Page {
     #[default]
     Loading,
     SelectOS,
-    Options,
+    Options(OptionSelection),
     Downloading,
     Docker,
     Complete,

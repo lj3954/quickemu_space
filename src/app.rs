@@ -5,10 +5,9 @@ use crate::creation;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
-use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{Alignment, Length, Subscription};
+use cosmic::iced::{Alignment, Subscription};
 use cosmic::widget::{self, icon, menu, nav_bar};
-use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
+use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element};
 use futures_util::SinkExt;
 use std::collections::HashMap;
 
@@ -149,7 +148,6 @@ impl Application for AppModel {
     fn view(&self) -> Element<Self::Message> {
         match self.page {
             Page::Creation => self.creation.view(),
-            _ => todo!(),
         }
     }
 

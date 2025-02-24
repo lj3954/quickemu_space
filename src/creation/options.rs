@@ -24,7 +24,7 @@ static RECOMMENDED_RAM: LazyLock<f64> =
     LazyLock::new(|| QuickgetInstance::get_recommended_ram() as f64);
 
 #[derive(Debug, Clone)]
-pub(super) struct OptionSelection {
+pub(crate) struct OptionSelection {
     selected_os: OS,
     release_list: SelectableComboBox<String>,
     edition_list: SelectableComboBox<String>,
@@ -336,7 +336,7 @@ impl OptionSelection {
             let next = widget::button::suggested("Next");
             let next = match vm_name {
                 Some(vm_name) if self.can_go_next(vm_name) => {
-                    next.on_press(super::Message::ChangePage(Page::Downloading.into()).into())
+                    next.on_press(super::Message::StartDownloads(vm_name.to_owned()).into())
                 }
                 _ => next,
             };

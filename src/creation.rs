@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+mod download;
 mod options;
 
 use std::fmt::Display;
@@ -60,6 +61,25 @@ impl State {
             Message::ChangePage(page) => {
                 self.page = *page;
             }
+            Message::StartDownloads(vm_name) => match self.page {
+                Page::Options(ref mut options) => {
+                    let instance = match options.to_instance(&vm_name) {
+                        Ok(instance) => instance,
+                        Err(e) => {
+                            self.page = Page::Error(e);
+                            return Task::none();
+                        }
+                    };
+                    let (download_status, task) = download::DownloadStatus::new(instance);
+                    self.page = Page::Download(download_status);
+                    return task;
+                }
+                _ => panic!("Download message while not being on download page"),
+            },
+            Message::Download(msg) => match self.page {
+                Page::Download(ref mut download) => return download.update(msg),
+                _ => panic!("Download message while not being on download page"),
+            },
         }
         Task::none()
     }
@@ -94,6 +114,8 @@ impl State {
                 widget::scrollable(list_column).into()
             }
             Page::Options(ref options) => options.view(),
+            Page::Download(ref download) => download.view(),
+            Page::Error(ref e) => widget::text(e).into(),
             _ => todo!(),
         }
     }
@@ -166,7 +188,7 @@ pub(super) enum Page {
     Loading,
     SelectOS,
     Options(options::OptionSelection),
-    Downloading,
+    Download(download::DownloadStatus),
     Docker,
     Complete,
     Error(String),
@@ -177,6 +199,8 @@ pub(super) enum Message {
     OSList(Vec<OS>),
     SelectedOS(OS),
     Options(options::Message),
+    StartDownloads(String),
+    Download(download::Message),
     Error(String),
     ChangePage(Box<Page>),
 }

@@ -245,7 +245,7 @@ impl Download {
                     "{} / {} ({:.2}%)",
                     Size::from_bytes(self.current_size),
                     Size::from_bytes(total_size),
-                    self.current_size as f64 / total_size as f64
+                    self.current_size as f64 / total_size as f64 * 100.0
                 )
             })
         } else {

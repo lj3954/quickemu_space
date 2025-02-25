@@ -37,7 +37,7 @@ pub(crate) struct OptionSelection {
 }
 
 impl OptionSelection {
-    pub(super) fn new(selected_os: OS) -> Self {
+    pub(super) fn new(selected_os: OS, default_vm_dir: PathBuf) -> Self {
         let mut options = Self {
             selected_os,
             release_list: SelectableComboBox::new_empty(),
@@ -45,7 +45,7 @@ impl OptionSelection {
             arch_list: SelectableComboBox::new_empty(),
             cpu_cores: *RECOMMENDED_CPU_CORES,
             ram: *RECOMMENDED_RAM,
-            directory: std::env::current_dir().unwrap(),
+            directory: default_vm_dir,
             vm_name: None,
             default_vm_name: None,
         };
@@ -94,34 +94,13 @@ impl OptionSelection {
             Message::SetRAM(ram) => self.ram = ram,
             Message::SetCPUCores(cores) => self.cpu_cores = cores,
             Message::SelectVMDir => {
-                return Task::perform(
-                    async move {
-                        let result = SelectedFiles::open_file()
-                            .title("Select VM Directory")
-                            .accept_label("Select")
-                            .modal(true)
-                            .multiple(false)
-                            .directory(true)
-                            .send()
-                            .await
-                            .unwrap()
-                            .response();
-
-                        result.ok().and_then(|dir| {
-                            dir.uris()
-                                .iter()
-                                .next()
-                                .and_then(|file| file.to_file_path().ok())
-                        })
-                    },
-                    |dir| {
-                        match dir {
-                            Some(dir) => crate::app::Message::from(Message::SelectedVMDir(dir)),
-                            _ => crate::app::Message::None,
-                        }
-                        .into()
-                    },
-                )
+                return Task::perform(crate::app::select_dir(), |dir| {
+                    match dir {
+                        Some(dir) => crate::app::Message::from(Message::SelectedVMDir(dir)),
+                        _ => crate::app::Message::None,
+                    }
+                    .into()
+                })
             }
             Message::SelectedVMDir(dir) => self.directory = dir,
             Message::SelectedVMName(name) => self.vm_name = Some(name),

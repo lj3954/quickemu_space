@@ -52,7 +52,33 @@ impl DownloadStatus {
                 );
             }
             Message::Finalize => {
-                todo!("finalizing");
+                let finalize_page = Task::perform(
+                    async move {
+                        crate::app::Message::from(super::Message::ChangePage(
+                            super::Page::Finalizing.into(),
+                        ))
+                    },
+                    |msg| msg.into(),
+                );
+
+                let instance = self.instance.clone();
+                let finalize = Task::perform(
+                    async move {
+                        let config_file_path = instance.get_config_file_path().to_owned();
+
+                        let finalize_result =
+                            tokio::task::spawn_blocking(move || instance.create_config())
+                                .await
+                                .expect("Couldn't spawn thread");
+                        crate::app::Message::from(match finalize_result {
+                            Ok(_) => super::Message::FinalizedConfigPath(config_file_path),
+                            Err(e) => super::Message::Error(format!("Error creating config: {e}")),
+                        })
+                    },
+                    |msg| msg.into(),
+                );
+
+                return finalize_page.chain(finalize);
             }
             Message::Specific(SpecificDownloadMessage { id, msg }) => {
                 let download = self

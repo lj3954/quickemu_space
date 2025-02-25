@@ -4484,7 +4484,7 @@ dependencies = [
 [[package]]
 name = "quickemu_core"
 version = "2.0.0"
-source = "git+https://github.com/lj3954/quickemu-rs#fc409f0fe5fe8edeaf9f90377a90bb6b1710e6bf"
+source = "git+https://github.com/lj3954/quickemu-rs#68dec88b6d22fa9acd44517e9b8e2106b4121db0"
 dependencies = [
  "derive_more 2.0.1",
  "dirs",
@@ -4529,7 +4529,7 @@ dependencies = [
 [[package]]
 name = "quickget_core"
 version = "2.0.0"
-source = "git+https://github.com/lj3954/quickemu-rs#fc409f0fe5fe8edeaf9f90377a90bb6b1710e6bf"
+source = "git+https://github.com/lj3954/quickemu-rs#68dec88b6d22fa9acd44517e9b8e2106b4121db0"
 dependencies = [
  "bzip2",
  "derive_more 1.0.0",

@@ -3,6 +3,7 @@
 use crate::config::Config;
 use crate::creation;
 use crate::fl;
+use ashpd::desktop::file_chooser::SelectedFiles;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::{Alignment, Subscription};
@@ -10,6 +11,7 @@ use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element};
 use futures_util::SinkExt;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -25,6 +27,7 @@ pub struct AppModel {
     nav: nav_bar::Model,
     /// Key bindings for the application's menu bar.
     key_binds: HashMap<menu::KeyBind, MenuAction>,
+    config_handler: Option<cosmic_config::Config>,
     // Configuration data that persists between application runs.
     config: Config,
     page: Page,
@@ -35,6 +38,8 @@ pub struct AppModel {
 #[derive(Debug, Clone)]
 pub enum Message {
     None,
+    UpdateDefaultVMDir(PathBuf),
+    SelectDefaultVMDir,
     Creation(creation::Message),
     OpenRepositoryUrl,
     SubscriptionChannel,
@@ -78,25 +83,35 @@ impl Application for AppModel {
 
         let (creation, creation_task) = creation::State::new();
 
+        let (config_handler, config) =
+            match cosmic_config::Config::new(Self::APP_ID, Config::VERSION) {
+                Ok(config_handler) => {
+                    let config = match Config::get_entry(&config_handler) {
+                        Ok(config) => config,
+                        Err((errors, config)) => {
+                            // for why in errors {
+                            //     tracing::error!(%why, "error loading app config");
+                            // }
+
+                            config
+                        }
+                    };
+                    (Some(config_handler), config)
+                }
+                Err(e) => {
+                    eprintln!("error loading config: {e}");
+                    (None, Config::default())
+                }
+            };
+
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
             context_page: ContextPage::default(),
+            config,
+            config_handler,
             nav,
             key_binds: HashMap::new(),
-            // Optional configuration file for an application.
-            config: cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
-                .map(|context| match Config::get_entry(&context) {
-                    Ok(config) => config,
-                    Err((_errors, config)) => {
-                        // for why in errors {
-                        //     tracing::error!(%why, "error loading app config");
-                        // }
-
-                        config
-                    }
-                })
-                .unwrap_or_default(),
             page: Page::default(),
             creation,
         };
@@ -114,7 +129,10 @@ impl Application for AppModel {
             menu::root(fl!("view")),
             menu::items(
                 &self.key_binds,
-                vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
+                vec![
+                    menu::Item::Button(fl!("about"), None, MenuAction::About),
+                    menu::Item::Button("Settings".to_string(), None, MenuAction::Settings),
+                ],
             ),
         )]);
 
@@ -138,6 +156,10 @@ impl Application for AppModel {
                 Message::ToggleContextPage(ContextPage::About),
             )
             .title(fl!("about")),
+            ContextPage::Settings => context_drawer::context_drawer(
+                self.settings(),
+                Message::ToggleContextPage(ContextPage::Settings),
+            ),
         })
     }
 
@@ -189,6 +211,25 @@ impl Application for AppModel {
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
             Message::None => {}
+            Message::UpdateDefaultVMDir(dir) => {
+                if let Some(config_handler) = &mut self.config_handler {
+                    if let Err(e) = self.config.set_default_vm_dir(config_handler, dir.clone()) {
+                        eprintln!("error updating config: {e}");
+                    }
+                }
+                // Paths are truncated to remove trailing slashes in the config; we need to use the
+                // full given path while receiving user input
+                self.config.default_vm_dir = dir;
+            }
+            Message::SelectDefaultVMDir => {
+                return Task::perform(crate::app::select_dir(), |dir| {
+                    match dir {
+                        Some(dir) => Message::UpdateDefaultVMDir(dir),
+                        _ => Message::None,
+                    }
+                    .into()
+                })
+            }
             Message::OpenRepositoryUrl => {
                 _ = open::that_detached(REPOSITORY);
             }
@@ -220,7 +261,9 @@ impl Application for AppModel {
             },
 
             Message::Creation(msg) => {
-                return self.creation.update(msg);
+                return self
+                    .creation
+                    .update(msg, &mut self.config, self.config_handler.as_ref());
             }
         }
         Task::none()
@@ -270,6 +313,31 @@ impl AppModel {
             .into()
     }
 
+    fn settings(&self) -> Element<Message> {
+        widget::settings::view_column(vec![widget::settings::section()
+            .title("New VM Options")
+            .add(
+                widget::settings::item::builder(fl!("default-vm-dir")).control(
+                    widget::row()
+                        .align_y(Alignment::Center)
+                        .push(
+                            widget::text_input(
+                                "VM Directory",
+                                self.config.default_vm_dir.display().to_string(),
+                            )
+                            .on_input(|dir| Message::UpdateDefaultVMDir(dir.into())),
+                        )
+                        .push(
+                            widget::button::icon(icon::from_name("folder-open-symbolic"))
+                                .on_press(Message::SelectDefaultVMDir)
+                                .tooltip("Select VM Directory"),
+                        ),
+                ),
+            )
+            .into()])
+        .into()
+    }
+
     /// Updates the header and window titles.
     pub fn update_title(&mut self) -> Task<Message> {
         let mut window_title = fl!("app-title");
@@ -298,11 +366,13 @@ pub enum Page {
 pub enum ContextPage {
     #[default]
     About,
+    Settings,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuAction {
     About,
+    Settings,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -311,6 +381,27 @@ impl menu::action::MenuAction for MenuAction {
     fn message(&self) -> Self::Message {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
+            MenuAction::Settings => Message::ToggleContextPage(ContextPage::Settings),
         }
     }
+}
+
+pub(crate) async fn select_dir() -> Option<PathBuf> {
+    let result = SelectedFiles::open_file()
+        .title("Select VM Directory")
+        .accept_label("Select")
+        .modal(true)
+        .multiple(false)
+        .directory(true)
+        .send()
+        .await
+        .unwrap()
+        .response();
+
+    result.ok().and_then(|dir| {
+        dir.uris()
+            .iter()
+            .next()
+            .and_then(|file| file.to_file_path().ok())
+    })
 }

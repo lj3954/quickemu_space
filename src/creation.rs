@@ -3,10 +3,11 @@
 mod download;
 mod options;
 
-use std::fmt::Display;
+use std::{fmt::Display, path::PathBuf};
 
 use cosmic::{
     app::command::Task,
+    cosmic_config,
     iced::{
         alignment::{Horizontal, Vertical},
         Length,
@@ -16,6 +17,8 @@ use cosmic::{
     Apply, Element,
 };
 use quickget_core::{data_structures::OS, ConfigSearch};
+
+use crate::config::Config;
 
 pub struct State {
     os_list: Vec<OS>,
@@ -42,14 +45,22 @@ impl State {
             task,
         )
     }
-    pub fn update(&mut self, msg: Message) -> Task<crate::app::Message> {
+    pub fn update(
+        &mut self,
+        msg: Message,
+        config: &mut Config,
+        config_handler: Option<&cosmic_config::Config>,
+    ) -> Task<crate::app::Message> {
         match msg {
             Message::OSList(os_list) => {
                 self.os_list = os_list;
                 self.page = Page::SelectOS;
             }
             Message::SelectedOS(os) => {
-                self.page = Page::Options(options::OptionSelection::new(os));
+                self.page = Page::Options(options::OptionSelection::new(
+                    os,
+                    config.default_vm_dir.clone().into(),
+                ));
             }
             Message::Options(msg) => match self.page {
                 Page::Options(ref mut options) => return options.update(msg),
@@ -80,6 +91,16 @@ impl State {
                 Page::Download(ref mut download) => return download.update(msg),
                 _ => panic!("Download message while not being on download page"),
             },
+            Message::FinalizedConfigPath(path) => {
+                self.page = Page::Complete;
+                if let Some(config_handler) = config_handler {
+                    let mut configs = config.existing_vm_configs.clone();
+                    configs.push(path);
+                    if let Err(e) = config.set_existing_vm_configs(config_handler, configs) {
+                        eprintln!("error updating config: {e}");
+                    }
+                }
+            }
         }
         Task::none()
     }
@@ -115,6 +136,20 @@ impl State {
             }
             Page::Options(ref options) => options.view(),
             Page::Download(ref download) => download.view(),
+            Page::Finalizing => widget::text("Finalizing VM configuration")
+                .apply(widget::container)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Horizontal::Center)
+                .align_y(Vertical::Center)
+                .into(),
+            Page::Complete => widget::text("Complete")
+                .apply(widget::container)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Horizontal::Center)
+                .align_y(Vertical::Center)
+                .into(),
             Page::Error(ref e) => widget::text(e).into(),
             _ => todo!(),
         }
@@ -190,6 +225,7 @@ pub(super) enum Page {
     Options(options::OptionSelection),
     Download(download::DownloadStatus),
     Docker,
+    Finalizing,
     Complete,
     Error(String),
 }
@@ -203,6 +239,7 @@ pub(super) enum Message {
     Download(download::Message),
     Error(String),
     ChangePage(Box<Page>),
+    FinalizedConfigPath(PathBuf),
 }
 
 impl From<Message> for crate::app::Message {
